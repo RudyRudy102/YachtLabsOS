@@ -1,0 +1,112 @@
+from pymodbus.client import ModbusTcpClient
+import time
+from datetime import datetime
+
+class ModbusReader:
+    def __init__(self, host='192.168.1.100', port=502):
+        """Initialize ModbusTCP client with host and port."""
+        self.client = ModbusTcpClient(host, port)
+        
+    def connect(self):
+        """Establish connection to the Modbus server."""
+        return self.client.connect()
+
+    def read_register(self, address, unit=1):
+        """Read a single register at the specified address."""
+        result = self.client.read_holding_registers(address, count=1, slave=unit)
+        if not result.isError():
+            return result.registers[0]
+        return None
+
+    def read_float(self, address, unit=1):
+        """Read two consecutive registers and interpret as float."""
+        result = self.client.read_holding_registers(address, count=2, slave=unit)
+        if not result.isError():
+            import struct
+            combined = (result.registers[0] << 16) | result.registers[1]
+            return struct.unpack('f', struct.pack('I', combined))[0]
+        return None
+
+def main():
+    # Initialize ModbusTCP client
+    reader = ModbusReader(host='192.168.1.100')
+    
+    if not reader.connect():
+        print("Failed to connect to the Modbus device!")
+        return
+
+    try:
+        while True:
+            print("\n" + "="*50)
+            print(f"Time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+            
+            # System Status
+            print("\nSystem Status:")
+            print(f"CCGX Relay 1 State: {'Open' if reader.read_register(806) else 'Closed'}")  # Address 806
+            print(f"CCGX Relay 2 State: {'Open' if reader.read_register(807) else 'Closed'}")  # Address 807
+            
+            # Battery System Information
+            print("\nBattery System Information:")
+            print(f"Battery Voltage (System): {reader.read_float(840)}V")
+            print(f"Battery Current (System): {reader.read_float(841)}A")
+            print(f"Battery Power (System): {reader.read_float(842)}W")
+            print(f"Battery State of Charge (System): {reader.read_float(843)}%")
+            print(f"Battery State by time: {reader.read_register(844)}")
+            print(f"Battery Time to Go (System): {reader.read_float(846)} seconds")
+            
+            # Battery Details
+            print("\nBattery Details:")
+            print(f"Battery power: {reader.read_float(256)}W")
+            print(f"Battery voltage: {reader.read_float(259)}V")
+            print(f"Battery current: {reader.read_float(261)}A")
+            print(f"Battery temperature: {reader.read_float(262)}°C")
+            
+            # Battery History
+            print("\nBattery History:")
+            print(f"Deepest discharge: {reader.read_float(281)}Ah")
+            print(f"Last discharge: {reader.read_float(282)}Ah")
+            print(f"Average discharge: {reader.read_float(283)}Ah")
+            print(f"Total charge cycles: {reader.read_register(284)}")
+            print(f"Full discharges: {reader.read_register(285)}")
+            print(f"Total Ah drawn: {reader.read_float(286)}Ah")
+            
+            # Solar Charger Data
+            print("\nSolar Charger Information:")
+            print(f"Battery voltage: {reader.read_float(771)}V")
+            print(f"Battery current: {reader.read_float(772)}A")
+            print(f"Battery temperature: {reader.read_float(773)}°C")
+            print(f"Charger on/off: {'On' if reader.read_register(774) else 'Off'}")
+            print(f"PV voltage: {reader.read_float(776)}V")
+            print(f"PV current: {reader.read_float(777)}A")
+            
+            # Tracker Data
+            print("\nTracker Information:")
+            for tracker in range(0, 4):
+                base_addr = 3724 + (tracker * 1)
+                print(f"\nTracker {tracker + 1}:")
+                print(f"PV power: {reader.read_float(base_addr)}W")
+            
+            # GPS Data
+            print("\nGPS Information:")
+            print(f"Latitude: {reader.read_float(2603)}")
+            print(f"Longitude: {reader.read_float(2604)}")
+            print(f"Course: {reader.read_float(2604)}°")
+            print(f"Speed: {reader.read_float(2605)} m/s")
+            print(f"Number of satellites: {reader.read_register(2606)}")
+            
+            # Environmental Data
+            print("\nEnvironmental Data:")
+            print(f"Solar irradiance: {reader.read_float(3000)} W/m²")
+            print(f"Wind speed: {reader.read_float(3001)} m/s")
+            print(f"External temperature: {reader.read_float(3003)}°C")
+            print(f"External temperature (second sensor): {reader.read_float(3004)}°C")
+            
+            time.sleep(5)  # Update every 5 seconds
+
+    except KeyboardInterrupt:
+        print("\nExiting...")
+    finally:
+        reader.client.close()
+
+if __name__ == "__main__":
+    main()
